@@ -1,0 +1,78 @@
+load "function.mgm";
+g := gen_sup(gen_base());
+e := gen_error(g,W);
+P := [F| Random(F): i in [1..k]];
+G := Gab_matrix(g,k);
+y := sum_polynomials(multiply_vector_matrix(P,G),e);
+
+function alpha(t,i,m)
+    temp := Frobenius(y[t],i)*g[m];
+    return Eltseq(temp);
+end function;
+
+function beta(t,i,m,j,p)
+    temp := Frobenius(g[p],i)*Frobenius(g[t],i+j)*g[m];
+    return Eltseq(temp);
+end function;
+
+print "1. Creating polynomial ring";
+T<[var]> := BooleanPolynomialRing(n*(W+k+1));
+//from 1 to n*(W+1) is f_im (i <= W+1, m <= n)
+//from n*(W+1)+1 to n*(W+k+1) is P_jp (j <= k, p <= n)
+L := [ ];
+
+for t in [1..n] do
+    for x in [1..n] do
+	pol := T!0;
+	for i in [0..W] do
+	    for m in [1..n] do
+		a := alpha(t,i,m);
+		pol := pol - a[x]*var[i*n+m];
+		for j in [0..k-1] do
+		    for p in [1..n] do
+			b := beta(t,i,m,j,p);
+			pol := pol+b[x]*var[i*n+m]*var[n*(W+1)+j*n+p];
+		    end for;
+		end for;
+	    end for;
+	end for;
+	Append(~L,pol);
+    end for;
+end for;
+
+for i in [1..n*(W+k+1)] do
+    Append(~L,var[i]^2+var[i]);
+end for;
+
+print "2. Creating the ideal";
+I := Ideal(L);
+
+
+print "3. Calculating the Groebner basis";
+SetVerbose("Groebner",true);
+gb :=  GroebnerBasis(I);
+
+print "4. Solving the system equations";
+sol := VarietySequence(Ideal(gb));
+
+V_e := Interpolation_N0(e);
+f := seq_to_listF2(V_e);
+bool := true;
+for i in [0..W] do
+	temp := [sol[i*n+m]: m in [1..n]];
+	if temp ne f[i+1] then
+	    bool := false;
+	end if;
+end for;
+
+print bool;
+
+bool := true;
+for i in [0..k-1] do
+	temp := [sol[n*(W+1)+i*n+p]: p in [1..n]];
+	if temp ne P[i+1] then
+	    bool := false;
+	end if;
+end for;
+
+print bool;
