@@ -1,0 +1,366 @@
+E := GF(2);
+F := RandomExtension(E,n);
+ground := GroundField(F);
+alpha := Generator(F);
+R<x> := PolynomialRing(F);
+
+
+//-------------------------------------------------------------------//
+
+// This part is for construction over a finite field GF(2^n)
+
+// Generating the normal base of extension [F(2^n):GF(2)]
+function gen_base()
+    base := [F!0: i in [1..n]];
+    temp := F!1;
+    for i in [1..n] do
+	base[i] := temp;
+	temp := temp*alpha;
+    end for;
+    return base;
+end function;
+
+// Multiplication a vector (in form of sequence) with a matrix
+function multiply_vector_matrix(m,G)
+    nrows := #m;
+    res := (Matrix(F,1,nrows,m)*Matrix(F,G))[1];
+    ncols := Ncols(res);
+    return [F | res[i]: i in [1..ncols]];
+end function;
+
+// Generating a random base of extension [F(2^n):GF(2)] (g)
+function gen_sup(gen_base)
+    found := false;
+    while not found do
+	M := RandomMatrix(E,n,n);
+	if Rank(M) eq n then
+	       M1 := Matrix(F,M);
+	       return multiply_vector_matrix(gen_base,M1);
+	end if;
+    end while;
+end function;
+
+// Generating base of a subspace
+function gen_subspace(gen_sup,t)
+    found := false;
+    while not found do
+	M := RandomMatrix(E,n,t);
+	if Rank(M) eq t then
+	       M1 := Matrix(F,M);
+	       return  multiply_vector_matrix(gen_sup,M1);
+	end if;
+    end while;
+end function;
+
+// Generating a vector in subspace given the base
+function gen_vect_sub(gen_sub)
+    len := #gen_sub;
+    M := Matrix(F,RandomMatrix(E,len,n));
+    return multiply_vector_matrix(gen_sub,M);
+end function;
+
+// Write a vector GF(2^n)^n in a matrix GF(2)^(nxn)
+function transform_to_F2(vector)
+    len := #vector;
+    M := ZeroMatrix(E,n,len);
+    for i in [1..len] do
+	m := Eltseq(vector[i],E);
+	for j in [1..n] do
+	    M[j,i] := m[j];
+	end for;
+    end for;
+    return M;
+end function;
+
+// Caculating rank of a vector
+function rank(vector)
+    M := transform_to_F2(vector);
+    return Rank(M);
+end function;
+
+
+// Generating Gabidulin matrix given the base
+function Gab_matrix(gen_sup,nrows)
+    ncols := #gen_sup;
+    M := ZeroMatrix(F,nrows,ncols);
+    for i in [1..nrows] do
+	for j in [1..ncols] do
+	    M[i,j] := gen_sup[j];
+	    gen_sup[j] := gen_sup[j]^2;
+	end for;
+    end for;
+    return M;
+end function;
+
+// Generating an error (a vector e satisfying w(e) <= t)
+function gen_error(gen_sup,t)
+    gensub := gen_subspace(gen_sup,t);
+    M := Matrix(F,RandomMatrix(E,t,n));
+    return multiply_vector_matrix(gensub,M);
+end function;
+
+
+// Transform a vector into a sequence
+function vector_to_seq(vector)
+    len := Ncols(vector);
+    return [F|vector[i]: i in [1..len]];
+end function;
+
+
+//-----------------------------------------------------------//
+
+// This part is simulation all operations of Ore polynomials by operation over sequences
+
+
+// return deg of polynomial, given sequence of coefficients
+function degree_polynomial(P)
+    len := #P;
+    for i in [0..len-2] do
+	if P[len-i] ne 0 then
+	    return len-i-1;
+	end if;
+    end for;
+    return 0;
+end function;
+
+function summary(P)
+    res:=[F|P[i] : i in [1..degree_polynomial(P)+1]];
+    return res;
+end function;
+
+
+// v is an element of GF(2^n)
+// len is q-degree of polynomial P with considering P as a sequence
+// of len elemements.
+// Calculating P(v) = sum (P[i+1] v^(2^i)) i=0..len-1
+
+function evaluate_polynomial(P,v)
+    len := #P;
+    res := F!0;
+    temp := v;
+    for i in [0..len-1] do
+	fac := P[i+1]*temp;
+	res := res + fac;
+	temp := temp^2;
+    end for;
+    return res;
+end function;
+
+
+// return PoQ
+function product_polynomials(P,Q)
+    lenP := #P;
+    lenQ := #Q;
+    res := [F|0: i in [1..lenP+lenQ-1]]; 
+    for j in [0..lenQ-1] do
+	fac := Q[j+1];
+	for i in [0..lenP-1] do
+	    temp := P[i+1] * fac;
+	    res[i+j+1] := res[i+j+1] + temp;
+	    fac := fac^2;
+	end for;
+    end for;
+    return res;
+end function;
+
+// return (X+a)oQ
+function product_by_mono(a,Q)
+    lenQ := #Q;
+    res := [F|0: i in [1..lenQ+1]];
+    res[1] := a*Q[1];
+    res[lenQ+1] := Q[lenQ]*Q[lenQ];
+    for i in [2..lenQ] do
+	res[i] := Q[i-1]^2+a*Q[i];
+    end for;
+    return res;
+end function;
+
+// return a*Q
+function product_by_scalar(a,Q)
+    lenQ := #Q;
+    res := [F|a*Q[i]: i in [1..lenQ]];
+    return res;
+end function;
+
+
+// return P+Q
+function sum_polynomials(P,Q)
+    lenP := #P;
+    lenQ := #Q;
+    res := [F|0: i in [1..Max([lenP,lenQ])]];
+    if lenP gt lenQ then
+	for i in [1..lenQ] do
+	    res[i] := P[i] + Q[i]; 
+	end for;
+	for i in [lenQ+1..lenP] do
+	    res[i] := P[i];
+	end for;
+    elif lenP lt lenQ then
+	for i in [1..lenP] do
+	    res[i] := P[i] + Q[i]; 
+	end for;
+	for i in [lenP+1..lenQ] do
+	    res[i] := Q[i];
+	end for;
+    else
+	for i in [1..lenP] do
+	    res[i] := P[i] + Q[i];
+	end for;
+    end if;
+    return summary(res);
+end function;
+
+// Calculating the Frobenius power of a polynomial
+function square_polynomial(P)
+    lenP := #P;
+    res := [F|0: i in[1..lenP+1]];
+    for i in [2..lenP+1] do
+	res[i] := P[i-1]^2;
+    end for;
+    return res;
+end function;
+
+
+//---------------------------------------------------------------------//
+
+//This part for the decoding Gabidulin code by prof. Pierre Loidreau
+
+function sum_vect(v1,v2)
+    len := #v1;
+    return [v1[i] + v2[i]: i in [1..len]];
+end function;
+
+
+// return polynomial f such that f<g> = 0
+
+// return polynomial fi such that fi(j) = delta(i,j)
+
+function Interpolation_N0(g)
+    k := #g;
+    A := [F!1];
+    for i in [1..k] do
+	A_gi := evaluate_polynomial(A,g[i]);
+	A := product_by_mono(A_gi,A);
+    end for;
+    return A;
+end function;
+
+function Interpolation_N1(g,j)
+    k := #g;
+    s := g[j];
+    L := Remove(g,j);
+    A := [L[1],1];
+    for i in [2..k-1] do
+	B := sum_polynomials(square_polynomial(A),product_by_scalar(evaluate_polynomial(A,L[i]),A));
+	A := B;
+    end for;
+    ev := evaluate_polynomial(A,g[j]);
+    return product_by_scalar(F!(1/ev),A);
+end function;
+
+function MultiInterpolation(g,y)
+    k := #g;
+    A := [F|1];
+    I := [F|0];
+    for i in [1..k] do
+	I_gi := evaluate_polynomial(I,g[i]);
+	A_gi := evaluate_polynomial(A,g[i]);
+	I := sum_polynomials(I,product_by_scalar((y[i]-I_gi)/A_gi,A));
+	A := product_by_mono(A_gi,A);
+    end for;
+    return I,A;
+end function;
+
+//Reconstruction_Linear_Polynomial
+
+//return P<g>
+function eval_seq(P,g)
+    nrows := #P;
+    Gab_g := Gab_matrix(g,nrows);
+    return multiply_vector_matrix(P,Gab_g);
+end function;
+
+
+function RLP(g,y,k)
+    L1 := [F|g[i]: i in [1..k]];
+    L2 := [F|y[i]: i in [1..k]];
+
+    N1,N0 := MultiInterpolation(L1,L2);
+    W0 := [F!0];
+    W1 := [F!1];
+    u0 := sum_polynomials(eval_seq(N0,g),eval_seq(W0,y));
+    u1 := sum_polynomials(eval_seq(N1,g),eval_seq(W1,y));
+    zero := [F| 0: i in [1..n]];
+
+    for i in [k+1..n] do
+	j := i;
+	while  (j le n) and (u0[j] ne 0) and (u1[j] eq 0) do
+	    j := j+1;
+	end while;
+	if j eq n+1 then
+	    return W1,N1;
+	else
+	    a := u0[i]; u0[i] := u0[j]; u0[j] := a;
+	    b := u1[i]; u1[i] := u1[j]; u1[j] := b;
+	end if;
+
+	if u1 ne zero then
+	    N1_ := product_by_mono(u1[i],N1);
+	    W1_ := product_by_mono(u1[i],W1);
+	    N0_ := sum_polynomials(N0,product_by_scalar(u0[i]/u1[i],N1));
+	    W0_ := sum_polynomials(W0,product_by_scalar(u0[i]/u1[i],W1));
+	end if;
+	if (u0 eq zero) and (u1 eq zero) then
+	    N1_ := square_polynomial(N1);
+	    W1_ := square_polynomial(W1);
+	    N0_ := N0;
+	    W0_ := W0;
+	end if;
+	
+	N0 := N1_;
+	W0 := W1_;
+	N1 := N0_;
+	W1 := W0_;
+	u0 := sum_vect(eval_seq(N0,g),eval_seq(W0,y));
+	u1 := sum_vect(eval_seq(N1,g),eval_seq(W1,y));
+    end for;
+    return W1,N1;
+end function;
+
+
+// division of 2 Ore polynomials
+function euclidean_division(f,g)
+    r := f;
+    t := #f-#g;
+    if t lt 0 then
+	return [[F!0],f];
+    end if;
+    q := [F|0: i in [1..t+1]];
+    while #r ge #g do
+	n := #r;
+	s := #g;
+	dif := n-s;
+	tmp := r[n]/g[s];
+	tmp := Frobenius(tmp,1-s);
+	P := [F|0 : i in [1..dif+1]];
+	P[dif+1] := tmp;
+	q[dif+1] := tmp;
+	r := sum_polynomials(r,product_polynomials(g,P));
+    end while;
+    return q,r;
+end function;
+
+
+// decode Gabidulin
+function decodage_gabidulin(g,y,dim)
+    W,N := RLP(g,y,dim);
+    f := euclidean_division(N,W);
+    
+    sol := [F! 0: i in [1..n]];
+    e :=  [F! 0: i in [1..n]];
+    for i in [1..n] do
+	sol[i] := evaluate_polynomial(f,g[i]);
+	e[i] := y[i] - sol[i];
+    end for;
+    return sol,e;
+end function;
