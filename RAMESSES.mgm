@@ -1,1 +1,124 @@
+load "function.mgm";
+
+
+
+
+g := gen_sup(gen_base());
+G := Gab_matrix(g,k);
+
+// Private key
+
+gensub1 := gen_subspace(g,W);
+Vpriv := Interpolation_N0(gensub1);
+Kpriv := Matrix(F,1,n,gen_vect_sub(gensub1));
+
+//Public key
+H := parity_Gab_matrix(g,k);
+Kpub := H*Transpose(Kpriv);
+
+// Ciphering
+x := Solution(Transpose(H),Transpose(Kpub));
+T := algebraic_matrix(g,t);
+
+gensub2 := gen_subspace(g,Floor((n-k-W-t)/2));
+pt := gen_vect_sub(gensub2);
+V_pt := Interpolation_N0(gensub2);
+
+print #Vpriv,#V_pt;
+
+T1 := Matrix(F,T);
+ct := H*Transpose(Matrix(F,1,n,sum_polynomials(vector_to_seq((x*T1)[1]),pt)));
+
+//Deciphering
+
+y := Solution(Transpose(H),Transpose(ct));
+y_seq := vector_to_seq(y[1]);
+y_Gab := Gab_matrix(y_seq,W+1);
+syn := multiply_vector_matrix(Vpriv,y_Gab);
+
+c,err := decodage_gabidulin(g,syn,k+W+t);
+
+//Find pt!!!
+//A := gen_A(Vpriv);
+//M := transform_to_F2(pt);
+//B := transform_to_F2(err);
+//print "1. test gen_A = ", A*M eq B;
+
+//pt_test,N := find_pt(Vpriv,err);
+//M_test := transform_to_F2(pt_test);
+//print "2. test find_pt = ", A*M_test eq B;
+
+
+
+//---------------------------------------------------------//
+
+V := VectorSpace(E,n);
+//L1 := [ ];
+//len1 := #gensub1;
+//for i in [1..len1] do
+//    Append(~L1,Eltseq(gensub1[i]));
+//end for;
+//epsilon := sub<V | L1>;
+
+//print "3. test information subspace == epsilon? ", epsilon eq N;
+
+//L2 := [ ];
+//len2 := #gensub2;
+//for i in [1..len2] do
+//    Append(~L2,Eltseq(gensub2[i]));
+//end for;
+//P := sub<V | L2>;
+
+
+//int := P meet epsilon;
+//print "4. Span(pt) intersection with epsilon = empty? ", Dimension(int) eq 0;
+
+
+//L := L2 cat L1;
+//L := [Vector(E,L[i]): i in [1..#L]];
+//union := VectorSpaceWithBasis(L);
+
+
+//res := [F |0 : i in [1..96]];
+//pt_test_F2 := Transpose(transform_to_F2(pt_test));
+//for i in [1..96] do
+//    pt_test_vect := Vector(E,pt_test_F2[i]);
+//    res_vect := Coordinates(union,pt_test_vect);
+//    for j in [1..4] do
+//	res[i] := res[i] + res_vect[j]*gensub2[j];
+//    end for;
+//end for;
+
+//print res eq pt;
+//print "5. decomposition method in case epsilon and Span(pt) disjoins and known base of pt", res eq pt;
+
+err_matrix := transform_to_F2(err);
+
+L_err := [ ];
+for i in [1..n] do
+    Append(~L_err,[err_matrix[i][j]: j in [1..96]]);
+end for;
+
+test_err := sub<V|L_err>;
+
+pt_matrix := transform_to_F2(pt);
+
+L_pt := [ ];
+for i in [1..n] do
+    Append(~L_pt,[pt_matrix[i][j]: j in [1..96]]);
+end for;
+
+test_pt := sub<V|L_pt>;
+
+print test_err eq test_pt;
+
+y0 := [F|0 : i in [1..96]];
+for i in [1..81] do
+    y0[i] := g[i];
+end for;
+
+f := MultiInterpolation(g,y0);
+
+print #f;
+	   
 
